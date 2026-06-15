@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A Vidking iframe player with server-side TMDB title search.">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; frame-src https://www.vidking.net; style-src 'self'; script-src 'self'; img-src 'self' data: https://image.tmdb.org; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self';">
+  <link rel="icon" href="/tmdb-logo.svg" type="image/svg+xml">
+  <title>Vidking Player</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">WEB APP</p>
+      <h1>Vidking Player</h1>
+      <p class="subtitle">Search TMDB by title when the server is configured, or load content manually with a TMDB ID.</p>
+    </div>
+    <div class="connection-status" id="connectionStatus" aria-live="polite">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="connectionStatusText">Ready</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="player-column" aria-labelledby="playerHeading">
+      <div class="panel player-panel">
+        <div class="panel-heading player-heading-row">
+          <div>
+            <p class="section-label">PLAYER</p>
+            <h2 id="playerHeading">Nothing loaded</h2>
+          </div>
+          <div class="player-actions">
+            <button class="icon-button" id="copyUrlButton" type="button" disabled>Copy URL</button>
+            <button class="icon-button" id="openButton" type="button" disabled>Open separately</button>
+          </div>
+        </div>
+
+        <div class="video-frame" id="videoFrame">
+          <div class="empty-state" id="emptyState">
+            <div class="play-mark" aria-hidden="true">&#9654;</div>
+            <strong>Search for a title or enter a TMDB ID</strong>
+            <span>The embedded player is supplied by Vidking and requires an internet connection.</span>
+          </div>
+
+          <iframe
+            id="player"
+            title="Vidking video player"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen
+            hidden>
+          </iframe>
+        </div>
+
+        <div class="progress-area" id="progressArea" hidden>
+          <div class="progress-meta">
+            <span id="eventStatus">Waiting for playback</span>
+            <span id="timeStatus">00:00 / 00:00</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="Watch progress"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+      </div>
+
+      <section class="panel history-panel" aria-labelledby="historyHeading">
+        <div class="panel-heading history-heading">
+          <div>
+            <p class="section-label">LOCAL STORAGE</p>
+            <h2 id="historyHeading">Recently played</h2>
+          </div>
+          <button class="text-button" id="clearHistoryButton" type="button">Clear history</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <p class="muted-copy">No viewing history has been saved on this browser.</p>
+        </div>
+      </section>
+    </section>
+
+    <aside class="panel controls-panel" aria-labelledby="controlsHeading">
+      <div class="panel-heading">
+        <p class="section-label">CONTROLS</p>
+        <h2 id="controlsHeading">Find and load content</h2>
+      </div>
+
+      <div class="controls-tabs" role="tablist" aria-label="Controls sections">
+        <button id="playerTab" class="controls-tab" type="button" role="tab"
+                aria-selected="true" aria-controls="playerPanel" data-tab="player" tabindex="0">
+          Player
+        </button>
+        <button id="episodesTab" class="controls-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="episodesPanel" data-tab="episodes"
+                tabindex="-1" disabled aria-disabled="true">
+          Episodes
+        </button>
+      </div>
+
+      <section id="playerPanel" class="tab-panel" role="tabpanel" aria-labelledby="playerTab">
+        <form id="playerForm" novalidate>
+          <section id="tmdbModeStatusSection" class="tmdb-status-section" hidden>
+            <p class="search-status tmdb-status-message" id="tmdbModeStatus" aria-live="polite"></p>
+          </section>
+
+          <section id="tmdbSearchSection" class="tmdb-search" aria-labelledby="searchHeading" hidden>
+            <div>
+              <span class="field-title" id="searchHeading">Search TMDB</span>
+              <small>Movies and TV programmes are searched together.</small>
+            </div>
+
+            <div class="search-row">
+              <input id="searchInput" type="search" maxlength="100"
+                     autocomplete="off" placeholder="e.g. Breaking Bad">
+              <button id="searchButton" class="secondary-button" type="button">Search</button>
+            </div>
+
+            <p class="search-status" id="searchStatus" aria-live="polite"></p>
+            <div class="search-results" id="searchResults" role="list" hidden></div>
+          </section>
+
+          <section id="manualTmdbSection" class="manual-tmdb-section">
+            <fieldset class="type-switch">
+              <legend class="sr-only">Content type</legend>
+              <label>
+                <input type="radio" name="mediaType" value="movie" checked>
+                <span>Movie</span>
+              </label>
+              <label>
+                <input type="radio" name="mediaType" value="tv">
+                <span>TV episode</span>
+              </label>
+            </fieldset>
+
+            <label class="field">
+              <span>TMDB ID</span>
+              <input id="tmdbInput" type="text" inputmode="numeric" autocomplete="off"
+                     pattern="[0-9]+" placeholder="e.g. 1396" required>
+              <small>Enter a movie or TV TMDB ID manually.</small>
+            </label>
+          </section>
+
+          <section id="selectedContentSection" class="selected-content-section">
+            <div class="form-divider" id="selectedContentDivider" hidden><span>Selected content</span></div>
+
+            <div class="tv-fields" id="tvFields" hidden>
+              <label class="field">
+                <span>Season</span>
+                <input id="seasonInput" type="number" min="0" max="999" value="1">
+              </label>
+              <label class="field">
+                <span>Episode</span>
+                <input id="episodeInput" type="number" min="1" max="9999" value="1">
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Display title <small>optional</small></span>
+              <input id="titleInput" type="text" maxlength="100" placeholder="Selected title">
+            </label>
+          </section>
+
+          <details class="settings">
+            <summary>Player settings</summary>
+
+            <label class="field colour-field">
+              <span>Accent colour</span>
+              <span class="colour-control">
+                <input id="colorPicker" type="color" value="#e50914" aria-label="Choose accent colour">
+                <input id="colorInput" type="text" value="e50914" maxlength="6"
+                       pattern="[A-Fa-f0-9]{6}" aria-label="Accent colour hex value">
+              </span>
+            </label>
+
+            <label class="check-row">
+              <input id="autoplayInput" type="checkbox">
+              <span>Autoplay when loaded</span>
+            </label>
+
+            <label class="check-row">
+              <input id="resumeInput" type="checkbox" checked>
+              <span>Resume saved progress</span>
+            </label>
+
+            <div class="tv-options" id="tvOptions" hidden>
+              <label class="check-row">
+                <input id="episodeSelectorInput" type="checkbox" checked>
+                <span>Show episode selector</span>
+              </label>
+
+              <label class="check-row">
+                <input id="nextEpisodeInput" type="checkbox" checked>
+                <span>Show next-episode control</span>
+              </label>
+            </div>
+          </details>
+
+          <p class="form-error" id="formError" role="alert" hidden></p>
+
+          <button class="primary-button" type="submit">Load player</button>
+        </form>
+      </section>
+
+      <section id="episodesPanel" class="tab-panel episodes-panel" role="tabpanel"
+               aria-labelledby="episodesTab" hidden>
+        <div class="episodes-panel-inner">
+          <div class="episodes-toolbar">
+            <div class="episodes-copy">
+              <p class="section-label">EPISODES</p>
+              <h3 class="episodes-heading">Browse seasons and episodes</h3>
+              <p class="episodes-meta" id="episodesMeta">Load a TV programme to browse seasons and episodes.</p>
+            </div>
+
+            <label class="field season-select-field">
+              <span>Season</span>
+              <select id="seasonSelect" disabled>
+                <option value="">Choose a season</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="episodes-status episodes-state-empty" id="episodesStatus" aria-live="polite">
+            Load a TV programme to browse seasons and episodes.
+          </div>
+          <div class="episode-list" id="episodeList" hidden></div>
+        </div>
+      </section>
+
+      <div class="notice">
+        <strong>Use lawfully.</strong>
+        <span>Only load media you are entitled to access. This page does not host, proxy or download video files.</span>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    <p>Settings, history and watch progress are stored only in this browser.</p>
+    <div class="tmdb-credit">
+      <img src="tmdb-logo.svg" alt="TMDB">
+      <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
+    </div>
+  </footer>
+</body>
+</html>
